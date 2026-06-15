@@ -1,6 +1,37 @@
 # Workflow
 
-## 1. Base Grouping
+Run this workflow in order. Each section produces an artifact that is required by the next section. Do not jump to final PPTX composition until source pages, base grouping, approved or unattended-run bases, element analysis, generated assets, sliced assets, text layout, and compose spec are ready.
+
+If a required artifact is missing, create it before continuing. Do not replace missing artifacts with assumptions.
+
+## Parallel Page Reconstruction
+
+Do not parallelize before source rendering, base grouping, and clean base generation are complete. In an unattended full run, skip approval waits only; all workflow steps still run in order before page-level subagents are dispatched.
+
+After clean bases are approved, the lead agent may dispatch page-level subagents. Each subagent owns one slide, or a small group of similar slides, and produces only intermediate artifacts:
+
+- page element analysis,
+- page text layout,
+- page geometry specs,
+- page PNG asset requirements,
+- page compose entries,
+- page QA notes.
+
+Page-level subagents must not create the final deck, skip element analysis, crop icons from source slides, rasterize normal text, or create their own incompatible shared component naming.
+
+The lead agent merges all page outputs, deduplicates shared components, normalizes categories, generates or reuses assets, verifies all pages are complete, composes the final PPTX, exports previews, and performs visual QA.
+
+## 1. Source Page Rendering
+
+Render or obtain one image per source page before any base grouping or visual analysis. Treat PPTX, PDF, screenshots, or scanned decks as visual source pages unless the user explicitly asks to reuse existing PPTX objects.
+
+Required output before step 2:
+
+- `source/slide_001.png` style page images,
+- source page count,
+- source image dimensions.
+
+## 2. Base Grouping
 
 Before image editing, inspect the source page images and propose which pages should share a base:
 
@@ -21,7 +52,12 @@ Use this grouping, or tell me which pages should be grouped differently.
 
 Read `base-grouping.md` for the inference rules. This is the first allowed stop: the user decides whether to accept the recommendation, unless they asked for an unattended full run.
 
-## 2. Clean Base Generation
+Required output before step 3:
+
+- source page list,
+- proposed and accepted base groups.
+
+## 3. Clean Base Generation
 
 Use the rendered source slide as the edit target. Generate a clean base that keeps the page theme and outer background only.
 
@@ -46,7 +82,12 @@ If the generated base keeps card frames or central layout blocks without user ap
 
 Review stop: after base images are generated, show the base previews and wait for user approval. Do not continue to element extraction until the user approves, unless the user asked for an unattended full run.
 
-## 3. Element Analysis
+Required output before step 4:
+
+- clean base image for each accepted base group,
+- user approval or unattended-run instruction.
+
+## 4. Element Analysis
 
 For each page, create `element_analysis.json` before making PNG sheets.
 
@@ -60,7 +101,13 @@ Repeated elements must reference one component.
 
 Run `scripts/validate_element_analysis.py` or validate against `element-analysis.schema.json` before composing.
 
-## 4. Asset Generation
+Required output before step 5:
+
+- `analysis/element_analysis.json`,
+- validated component categories,
+- `png_asset_sheet_plan` for PNG components.
+
+## 5. Asset Generation
 
 Create SVGs only for simple layout geometry and generated PNGs for semantic icons or complex composites.
 
@@ -72,11 +119,22 @@ Use `icon-sheet-prompt-template.md` for PNG sheets and `svg-to-ooxml.md` for sim
 
 After PNG assets are sliced, create contact sheets and summarize the element classification for QA. Do not stop for approval here; continue to text extraction and composition unless a hard QA failure requires regeneration.
 
-## 5. Text Extraction
+Required output before step 6:
+
+- SVG or shape specs for `simple_geometry_svg_ooxml`,
+- generated PNG asset sheets for `icon_png` and `complex_png_whole`,
+- sliced PNG assets with padding,
+- contact sheets and clean edge-touch checks.
+
+## 6. Text Extraction
 
 Use visual extraction by default. Store text separately from visual elements. Do not rasterize normal text into icon assets.
 
-## 6. Compose and QA
+Required output before step 7:
+
+- `analysis/texts_layout.json` with text content, style, and bboxes.
+
+## 7. Compose and QA
 
 Compose in this order:
 
@@ -90,3 +148,9 @@ Use `compose-spec.md` and `scripts/compose_component_pptx.py` for deterministic 
 Export preview PNGs. Use `scripts/compare_preview.py` to build side-by-side and diff images. Do not claim completion until the preview is visually checked.
 
 When something fails, follow `failure-decision-tree.md` before inventing a workaround.
+
+Required final output:
+
+- `out/editable.pptx`,
+- preview images,
+- comparison images or a visual QA note.

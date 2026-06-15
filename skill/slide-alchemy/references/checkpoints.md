@@ -53,4 +53,4 @@ Deliver:
 
 ## When To Skip
 
-Skip the two base-stage review stops only when the user explicitly asks for a full automatic run, batch processing, or no intermediate confirmation.
+For a full automatic run, batch processing, or no intermediate confirmation, skip only the waiting/approval pauses. Still execute every workflow step in order and produce the required artifacts.

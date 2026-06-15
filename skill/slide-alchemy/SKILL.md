@@ -1,6 +1,6 @@
 ---
 name: slide-alchemy
-description: Rebuild image-based PPT/PPTX slides, slide screenshots, or visual slide pages into an editable component-based PowerPoint deck. Use when the user asks to convert picture-style PPT to editable PPTX, restore slide screenshots into editable slides, extract slide bases/icons/text, rebuild slides with editable text, or create a lightweight alternative to full image-to-editable-ppt workflows. This skill emphasizes base-background generation, element classification, SVG-to-OOXML for simple geometry, generated PNG assets for complex icons, visual-model text extraction, conservative icon slicing QA, and two base-stage review stops.
+description: Use when converting image-based PPT/PPTX files, slide screenshots, scanned slide pages, or visual decks into editable component-based PowerPoint files; restoring slide images into editable text, shapes, and generated PNG assets; or running a lightweight image-to-editable-PPT workflow.
 ---
 
 # Slide Alchemy
@@ -16,13 +16,49 @@ Rebuild visual slide pages into editable PPTX by separating each page into:
 
 Keep this workflow lightweight. Do not use page workers or an editppt-style state machine.
 
+## Execution Discipline
+
+Follow the workflow in order. Do not skip ahead, merge phases, or compose the final PPTX before required upstream artifacts exist.
+
+Before starting each step, check that the prior step's required artifact exists:
+
+1. source page images exist before base grouping is proposed;
+2. accepted base grouping exists before clean base generation;
+3. approved clean base previews, or unattended-run clean bases, exist before element analysis;
+4. `element_analysis.json` exists before SVG or PNG asset generation;
+5. generated PNG asset sheets exist before slicing PNG assets;
+6. sliced PNG assets and contact sheets exist before text extraction and composition;
+7. `texts_layout.json` exists before final PPTX composition;
+8. preview images exist before claiming the rebuild is complete.
+
+If an artifact is missing, stop and produce that artifact instead of continuing. If a user asks for a later output directly, still run the required earlier steps first unless they explicitly override the workflow.
+
+## Parallel Page Reconstruction
+
+Parallel work is allowed only after clean bases are generated and approved. In an unattended full run, skip the approval wait, but still generate clean bases before dispatching page-level subagents.
+
+The lead agent must complete source rendering, base grouping, and clean base generation before dispatching page-level subagents. Do not dispatch page-level subagents before the base images and grouping are ready.
+
+After base approval, the lead agent may assign one subagent per slide, or one subagent per small group of visually similar slides. Each subagent must still follow the workflow for its assigned page. A page subagent may produce only page-level artifacts:
+
+- per-page element analysis,
+- per-page text layout,
+- per-page geometry specs,
+- per-page PNG asset requirements,
+- per-page compose entries,
+- page-specific QA notes.
+
+Page subagents must not compose the final deck, invent shared components independently, skip element analysis, rasterize normal text, crop icons from source slides, or bypass PNG asset QA.
+
+The lead agent must merge all page-level outputs, deduplicate shared components, normalize categories and naming, generate or reuse shared assets, check for missing pages or missing elements, compose the full PPTX, export previews, and run final visual QA. If a page is incomplete, return that page to the page-level workflow instead of guessing.
+
 ## Required Workflow
 
-1. Propose base grouping before extraction.
-   Inspect the source page images first, identify likely cover/content/ending/custom base groups, then present a recommended grouping to the user. This is the first allowed stop: ask the user to accept or modify the recommendation before generating bases, unless the user explicitly asked for an unattended full run.
-
-2. Render or obtain source page images.
+1. Render or obtain source page images.
    Treat even a PPTX input as visual source pages unless the user explicitly asks to reuse existing PPTX objects. Do not shortcut by deleting existing PPTX objects to create the base.
+
+2. Propose base grouping before extraction.
+   Inspect the source page images first, identify likely cover/content/ending/custom base groups, then present a recommended grouping to the user. This is the first allowed stop: ask the user to accept or modify the recommendation before generating bases, unless the user explicitly asked for an unattended full run.
 
 3. Generate clean bases with an image generation/editing model.
    The default base is a general background: keep outer background, edge decoration, ambient texture, and theme visuals; remove all text, icons, cards, boxes, title bars, and central content. Only preserve central layout containers if the user explicitly asks for template containers.
@@ -68,7 +104,7 @@ Use at most two review stops by default:
 1. Base grouping review: deliver the proposed base groups and wait for user approval or edits.
 2. Base preview review: deliver clean base previews and wait for user approval or regeneration requests.
 
-Do not stop after PNG asset generation. Contact sheets and classification summaries are QA artifacts, not approval gates. Only skip the two base-stage stops when the user explicitly asks to run all steps automatically.
+Do not stop after PNG asset generation. Contact sheets and classification summaries are QA artifacts, not approval gates. When the user asks to run all steps automatically, skip only the waiting/approval pauses; still execute every workflow step in order.
 
 ## Output Files
 
